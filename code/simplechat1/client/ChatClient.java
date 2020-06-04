@@ -25,7 +25,9 @@ public class ChatClient extends AbstractClient
    * The interface type variable.  It allows the implementation of 
    * the display method in the client.
    */
-  ChatIF clientUI; 
+  ChatIF clientUI;
+
+  private String loginid;
 
   
   //Constructors ****************************************************
@@ -38,12 +40,19 @@ public class ChatClient extends AbstractClient
    * @param clientUI The interface type variable.
    */
   
-  public ChatClient(String host, int port, ChatIF clientUI) 
-    throws IOException 
+  public ChatClient(String loginid, String host, int port, ChatIF clientUI) 
   {
     super(host, port); //Call the superclass constructor
+    this.loginid = loginid;
     this.clientUI = clientUI;
-    openConnection();
+    
+    try {
+      openConnection();
+      sendToServer("#login " + loginid);
+    } catch (IOException exception) {
+      clientUI.display("Cannot open connection.  Awaiting command.");
+    }
+
   }
 
   
@@ -68,8 +77,85 @@ public class ChatClient extends AbstractClient
   {
     try
     {
-      sendToServer(message);
+      String[] command = message.split(" ");
+
+      if (message.charAt(0)=='#') {
+        
+        if (command[0].equals("#quit")) {
+          quit();
+        }
+
+        else if (command[0].equals("#logoff")) {
+          try{
+            closeConnection();
+          } catch(Exception exception){
+            clientUI.display("Error : Could not logoff");
+          }
+        }
+
+        else if (command[0].equals("#sethost")) {
+          
+          if(!isConnected()) {
+            setHost(command[1]);
+            clientUI.display("Host set to: " + command[1]);
+
+          } else {
+            clientUI.display("Cannot set host! Client is logged off");
+          }
+        }
+
+        else if (command[0].equals("#setport")) {
+
+          if(!isConnected()) {
+            int customPort = Integer.parseInt(command[1]); 
+            setPort(customPort);
+            clientUI.display("Port set to: " + command[1]);
+
+          } else {
+            clientUI.display("Cannot set port! Client is logged off");
+          }
+        }
+
+        else if (command[0].equals("#login")) {
+          try{
+            if (!isConnected() && command.length == 2){
+              loginid = command[1];
+              openConnection();
+              sendToServer(message);
+
+            } else if (!isConnected() && command.length < 2){
+              clientUI.display("ERROR - No login ID specified.");
+            } 
+            
+            else if (isConnected() && command.length == 2) {
+              sendToServer("abort");
+            }
+
+          } catch(Exception exception){
+            System.out.println("Error : could not login!");
+          }
+        }
+
+        else if (command[0].equals("#gethost")) { 
+          String hostAddress = getHost(); 
+          clientUI.display("Host : "+hostAddress);
+        }
+
+        else if (command[0].equals("#getport")) {
+          int portAddress = getPort(); 
+          clientUI.display("Port : "+portAddress);
+        }
+
+        else {
+          clientUI.display("No such command exists");
+        }
     }
+
+    else {
+        sendToServer(message);
+      }
+    }
+
     catch(IOException e)
     {
       clientUI.display
@@ -77,7 +163,29 @@ public class ChatClient extends AbstractClient
       quit();
     }
   }
+
+  /**
+	 * Hook method called after the connection has been closed. The default
+	 * implementation does nothing. The method may be overriden by subclasses to
+	 * perform special processing such as cleaning up and terminating, or
+	 * attempting to reconnect.
+	 */
+	protected void connectionClosed() {
+    clientUI.display("Abnormal termination of connection.");
+  }
   
+  /**
+	 * Hook method called each time an exception is thrown by the client's
+	 * thread that is waiting for messages from the server. The method may be
+	 * overridden by subclasses.
+	 * 
+	 * @param exception
+	 *            the exception raised.
+	 */
+	protected void connectionException(Exception exception) {
+    clientUI.display("SERVER SHUTTING DOWN! DISCONNECTING!");
+    connectionClosed();
+	}
   /**
    * This method terminates the client.
    */
